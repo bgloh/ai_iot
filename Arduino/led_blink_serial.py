@@ -21,8 +21,13 @@ def find_arduino_port():
 
 
 def send(ser, cmd):
+    """명령을 보내고 ACK/ERR 응답을 기다린다. 중간에 온 스위치 이벤트는 따로 출력한다."""
     ser.write((cmd + "\n").encode())
-    reply = ser.readline().decode(errors="ignore").strip()
+    while True:
+        reply = ser.readline().decode(errors="ignore").strip()
+        if not reply or reply.startswith(("ACK", "ERR")):
+            break
+        print(f"   (이벤트: {reply})")
     print(f"-> {cmd:<3} | <- {reply or '(응답 없음)'}")
 
 
