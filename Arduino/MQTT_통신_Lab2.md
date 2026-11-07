@@ -38,7 +38,7 @@ paho-mqtt: 2.2.0
 MQTT Broker: HiveMQ Public Broker (broker.hivemq.com)
 Microcontroller: Arduino Uno R3
   - D7: LED (220Ω 저항 직렬)
-  - D6: 푸시 스위치 (INPUT_PULLUP, 누르면 LOW)
+  - D6: 푸시 스위치 (외부 10kΩ 풀업, 누르면 LOW)
 MQTT 클라이언트 앱: HiveMQ WebSocket Client(브라우저), MQTTX(PC), IoT MQTT Panel(스마트폰) 중 선택
 ```
 
