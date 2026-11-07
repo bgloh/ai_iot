@@ -1,13 +1,16 @@
-# Serial 통신 Lab.1 — Jetson ↔ Arduino LED 점멸과 스위치 입력
+# Serial 통신 Lab.1 — Jetson ↔ Arduino LED·스위치·조도센서·서보모터
 
 ## 1. 실험 목적
 
-본 실험의 목적은 Jetson Orin Nano와 Arduino Uno를 USB 케이블로 연결하고, 시리얼 통신으로 두 장치가 메시지를 주고받게 하는 것이다. 실험은 두 부분으로 나뉜다.
+본 실험의 목적은 Jetson Orin Nano와 Arduino Uno를 USB 케이블로 연결하고, 시리얼 통신으로 두 장치가 메시지를 주고받게 하는 것이다. 실험은 다섯 부분으로 나뉜다.
 
 | 파트 | 내용 | 데이터 방향 |
 |---|---|---|
 | **Part A. LED 점멸** (10~12장) | Jetson이 `ON`/`OFF` 명령을 보내 LED(D7)를 깜빡인다 | Jetson → Arduino |
 | **Part B. 스위치로 LED 제어** (13장) | 스위치(D6)를 누르면 Arduino가 Jetson에 알리고, Jetson이 LED를 켜는 명령을 보낸다 | Arduino → Jetson → Arduino |
+| **Part C. 조도센서 입력** (14장) | 조도센서(A0) 값을 0.1초마다 받아 숫자·전압·막대그래프로 표시한다 | Arduino → Jetson |
+| **Part D. 신호 필터링** (14장) | 이동평균·지수이동평균으로 값을 다듬고, 어두우면 LED를 켠다(히스테리시스) | Arduino → Jetson → Arduino |
+| **Part E. 서보모터 제어** (14장) | Jetson이 `SERVO <각도>` 명령으로 서보(D9)를 움직인다 | Jetson → Arduino |
 
 이 실험을 통해 다음을 익힌다.
 
@@ -31,7 +34,9 @@ Jetson Orin Nano
         ↕  USB 시리얼
      Arduino Uno
         ├─ "ON\n" / "OFF\n" 수신 → LED(D7) 켜기/끄기 → "ACK ON" / "ACK OFF" 응답
-        └─ 스위치(D6) 누름/뗌 감지 → "BTN PRESSED" / "BTN RELEASED" 전송
+        ├─ 스위치(D6) 누름/뗌 감지 → "BTN PRESSED" / "BTN RELEASED" 전송
+        ├─ 조도센서(A0) → "LIGHT <0~1023>" 전송 (Part C·D)
+        └─ "SERVO <각도>\n" 수신 → 서보(D9) 회전 → "ACK SERVO <각도>" 응답 (Part E)
 ```
 
 ---
@@ -58,12 +63,15 @@ Microcontroller: Arduino Uno R3 (USB ID 2341:0043)
 | 준비물 | 비고 |
 |---|---|
 | Jetson Orin Nano | 같은 네트워크에 연결, SSH 접속 가능 |
-| Arduino Uno R3 | 호환보드(CH340 칩)도 가능 — 15장 참고 |
+| Arduino Uno R3 | 호환보드(CH340 칩)도 가능 — 16장 참고 |
 | USB 케이블 | **데이터 전송용** 케이블. 충전 전용 케이블은 인식되지 않음 |
 | PC | VS Code + Remote - SSH 확장 설치 |
 | LED 1개 | 색상 무관 |
 | 저항 220 Ω ~ 330 Ω 1개 | LED 전류 제한용 |
 | 푸시 스위치(택트 스위치) 1개 | Part B용 |
+| 저항 10 kΩ 2개 | 스위치 풀업 1개(Part B), 조도센서 전압 분배 1개(Part C) |
+| 조도센서(CdS) 1개 | Part C·D용 |
+| 서보모터 SG90 1개 | Part E용 |
 | 브레드보드, 점퍼선 | |
 
 ## 2.1 LED 배선
@@ -81,30 +89,35 @@ Arduino D7 ──── [저항 220Ω] ──── (+) LED (−) ──── A
 
 > 외부 LED가 없으면 보드 내장 LED(보드에 **L**로 표시, 13번 핀)를 사용해도 된다. 8장 스케치에서 `LED_PIN`을 `LED_BUILTIN`으로 바꾸면 된다.
 
-## 2.2 스위치 배선 (풀업)
+## 2.2 스위치 배선 (외부 풀업)
 
-스위치를 Arduino의 **디지털 6번 핀(D6)** 에 **풀업(pull-up)** 방식으로 연결한다.
+스위치를 Arduino의 **디지털 6번 핀(D6)** 에 **외부 10kΩ 풀업(pull-up)** 방식으로 연결한다.
 
 ```text
             Arduino 5V
                 │
-          (내부 풀업 저항, 약 20~50kΩ)   ← INPUT_PULLUP으로 켬
+          [저항 10kΩ]          ← 외부 풀업 저항 (갈·검·주)
                 │
-Arduino D6 ─────┤
+Arduino D6 ─────┤  (D6 노드)
                 │
               [스위치]
                 │
 Arduino GND ────┘
 ```
 
-- 스위치의 한쪽 다리는 **D6**, 반대쪽 다리는 **GND**에 연결한다.
-- 저항은 Arduino 칩 안에 있는 **내부 풀업 저항**을 사용하므로 따로 달지 않아도 된다(8장 `INPUT_PULLUP`).
-- 외부 풀업 저항(10kΩ, D6 ↔ 5V)을 단 회로여도 똑같이 동작한다.
+- 외부 10kΩ 풀업 저항(갈·검·주)을 **D6와 5V 사이**에 단다.
+- 스위치의 한쪽 다리는 **D6 노드**, 반대쪽 다리는 **GND**에 연결한다.
+- 칩 내부에도 풀업 저항(약 20~50kΩ)이 있어 `INPUT_PULLUP`으로 켤 수 있으나, 본 실습은 **외부 풀업**을 사용한다(8장 `pinMode(BUTTON_PIN, INPUT)`).
+- 외부 풀업을 쓰는 이유:
+  1. 저항값을 직접 정할 수 있어(10kΩ) 잡음에 강하다.
+  2. 회로도에 저항이 드러나 있어 동작을 파악하기 쉽다.
+  3. 내부 풀업이 없는 핀이나 보드에서도 같은 방법으로 쓸 수 있다.
+- ⚠️ 10kΩ 저항을 빼먹으면 D6가 떠서(floating) 누르지 않아도 `BTN PRESSED/RELEASED`가 저절로 발생한다.
 - 택트 스위치는 다리가 4개이고 **두 개씩 내부에서 연결**되어 있다. 브레드보드 가운데 홈을 가로지르게 꽂고, **대각선 방향** 다리를 사용하면 실수를 줄일 수 있다.
 
 | 스위치 상태 | D6 전압 | `digitalRead(6)` |
 |---|---|---|
-| 떼었을 때 | 풀업 저항을 통해 5V | `HIGH` |
+| 떼었을 때 | 10kΩ 풀업 저항을 통해 5V | `HIGH` |
 | 눌렀을 때 | GND와 직접 연결 | `LOW` |
 
 풀업 회로에서는 **누르면 LOW**가 된다는 점에 주의한다(3.6절).
@@ -164,6 +177,10 @@ Arduino Uno에는 USB를 UART로 바꿔 주는 칩이 들어 있다. USB로 연�
 | Arduino → Jetson | `ERR <명령>` | 알 수 없는 명령 |
 | Arduino → Jetson | `BTN PRESSED` | 스위치를 누름 (이벤트, Part B) |
 | Arduino → Jetson | `BTN RELEASED` | 스위치를 뗌 (이벤트, Part B) |
+| Jetson → Arduino | `LIGHT\n` | 조도 값 한 번 요청 → `LIGHT <0~1023>` 응답 (Part C) |
+| Jetson → Arduino | `STREAM ON\n` / `STREAM OFF\n` | 조도 값 연속 전송 시작/중지 → `ACK STREAM ON/OFF` (Part C·D) |
+| Arduino → Jetson | `LIGHT <0~1023>` | STREAM ON 동안 0.1초마다 보내는 조도 값 (Part C·D) |
+| Jetson → Arduino | `SERVO <0~180>\n` | 서보 각도 설정 → `ACK SERVO <각도>`, 범위 밖이면 `ERR ...` (Part E) |
 
 - 모든 메시지는 **줄바꿈 문자(`\n`)로 끝난다.** 수신 측은 줄바꿈이 올 때까지 읽으면 메시지 하나를 얻는다.
 - 명령마다 응답(ACK)을 받으므로, Jetson은 Arduino가 명령을 제대로 처리했는지 확인할 수 있다.
@@ -178,7 +195,7 @@ Arduino Uno에는 USB를 UART로 바꿔 주는 칩이 들어 있다. USB로 연�
 - 스위치를 떼면 저항을 통해 5V → `HIGH`
 - 스위치를 누르면 GND에 직접 연결 → `LOW`
 
-Arduino는 `pinMode(핀, INPUT_PULLUP)`으로 칩 내부의 풀업 저항을 켤 수 있어 외부 저항이 필요 없다.
+본 실습은 외부 10kΩ 풀업과 `INPUT`을 사용한다. 외부 저항 없이 쓰려면 `INPUT_PULLUP`으로 내부 풀업을 켠다.
 
 **디바운싱(Debouncing)**
 
@@ -339,27 +356,43 @@ pyserial 3.5
 
 VS Code에서 `~/Arduino/led_serial/led_serial.ino` 파일을 만들고 다음 코드를 입력한다.
 
-이 스케치 하나로 Part A(LED 점멸)와 Part B(스위치 입력)를 모두 수행한다.
+이 스케치 하나로 Part A(LED 점멸), Part B(스위치 입력), Part C~E(조도센서·필터링·서보모터)를 모두 수행한다. `← 추가` 표시가 붙은 부분은 Part C~E용이다(14장). 같은 코드가 저장소의 `Arduino/led_serial/led_serial.ino`에 있다.
 
 ```cpp
 // Jetson과 시리얼로 통신하며 LED(D7)를 제어하고 스위치(D6) 상태를 보고한다.
+// Part C~E 확장: 조도센서(A0) 값을 보고하고, 서보모터(D9)를 제어한다.
 //
 // Jetson → Arduino 명령:  "ON\n", "OFF\n"
+//                         "LIGHT\n", "STREAM ON\n", "STREAM OFF\n", "SERVO <0~180>\n"   ← 추가
 // Arduino → Jetson 응답:  "ACK ON", "ACK OFF", "ERR <명령>"
+//                         "LIGHT <0~1023>", "ACK STREAM ON", "ACK STREAM OFF", "ACK SERVO <각도>"   ← 추가
 // Arduino → Jetson 이벤트: "BTN PRESSED", "BTN RELEASED"
+//                         STREAM ON 동안 0.1초마다 "LIGHT <0~1023>"   ← 추가
+
+#include <Servo.h>                     // ← 추가
 
 const int LED_PIN = 7;                // 디지털 7번 핀에 연결한 LED
-const int BUTTON_PIN = 6;             // 디지털 6번 핀에 연결한 풀업 스위치 (누르면 LOW)
+const int BUTTON_PIN = 6;             // 디지털 6번 핀에 연결한 스위치 (외부 10kΩ 풀업, 누르면 LOW)
 const unsigned long DEBOUNCE_MS = 30; // 스위치 떨림(채터링) 무시 시간
+
+const int LIGHT_PIN = A0;             // ← 추가: 조도센서(CdS) 전압 분배 출력
+const int SERVO_PIN = 9;              // ← 추가: 서보모터 신호선(주황)
+const unsigned long STREAM_MS = 100;  // ← 추가: 조도 값 전송 주기 (0.1초)
 
 int lastReading = HIGH;               // 직전에 읽은 핀 값
 int buttonState = HIGH;               // 디바운싱이 끝난 확정 상태
 unsigned long lastChangeMs = 0;       // 핀 값이 마지막으로 바뀐 시각
 
+Servo servo;                          // ← 추가
+bool streaming = false;               // ← 추가: true이면 조도 값을 계속 보낸다
+unsigned long lastStreamMs = 0;       // ← 추가
+
 void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_PIN, INPUT);         // 외부 10kΩ 풀업 사용 (외부 저항 없이 쓰려면 INPUT_PULLUP)
+  servo.attach(SERVO_PIN);            // ← 추가
+  servo.write(90);                    // ← 추가: 시작 위치는 가운데(90도)
   Serial.begin(9600);
   Serial.println("READY");
 }
@@ -376,6 +409,25 @@ void handleCommand() {
     } else if (cmd == "OFF") {
       digitalWrite(LED_PIN, LOW);
       Serial.println("ACK OFF");
+    } else if (cmd == "LIGHT") {                 // ← 추가: 조도 값 한 번 읽기
+      Serial.print("LIGHT ");
+      Serial.println(analogRead(LIGHT_PIN));
+    } else if (cmd == "STREAM ON") {             // ← 추가: 조도 값 계속 보내기
+      streaming = true;
+      Serial.println("ACK STREAM ON");
+    } else if (cmd == "STREAM OFF") {            // ← 추가
+      streaming = false;
+      Serial.println("ACK STREAM OFF");
+    } else if (cmd.startsWith("SERVO ")) {       // ← 추가: 서보 각도
+      int deg = cmd.substring(6).toInt();
+      if (deg >= 0 && deg <= 180) {
+        servo.write(deg);
+        Serial.print("ACK SERVO ");
+        Serial.println(deg);
+      } else {
+        Serial.print("ERR ");
+        Serial.println(cmd);
+      }
     } else if (cmd.length() > 0) {
       Serial.print("ERR ");
       Serial.println(cmd);
@@ -403,9 +455,19 @@ void checkButton() {
   }
 }
 
+// ← 추가: STREAM ON 상태이면 STREAM_MS마다 조도 값을 보낸다.
+void streamLight() {
+  if (streaming && millis() - lastStreamMs >= STREAM_MS) {
+    lastStreamMs = millis();
+    Serial.print("LIGHT ");
+    Serial.println(analogRead(LIGHT_PIN));
+  }
+}
+
 void loop() {
   handleCommand();
   checkButton();
+  streamLight();                      // ← 추가
 }
 ```
 
@@ -418,7 +480,7 @@ void loop() {
 | `LED_PIN = 7` | LED를 연결한 디지털 핀 번호 (2.1절 배선) |
 | `BUTTON_PIN = 6` | 스위치를 연결한 디지털 핀 번호 (2.2절 배선) |
 | `pinMode(LED_PIN, OUTPUT)` | 7번 핀을 출력으로 설정 |
-| `pinMode(BUTTON_PIN, INPUT_PULLUP)` | 6번 핀을 입력으로 설정하고 내부 풀업 저항을 켬 (3.6절) |
+| `pinMode(BUTTON_PIN, INPUT)` | 6번 핀을 입력으로 설정 (외부 10kΩ 풀업 사용, 3.6절) |
 | `Serial.begin(9600)` | 시리얼 통신을 9600 bps로 시작. **Python 쪽과 같아야 함** |
 | `Serial.println("READY")` | 부팅이 끝났음을 Jetson에 알림. `println`은 끝에 줄바꿈(`\r\n`)을 붙임 |
 | `Serial.available()` | 수신 버퍼에 도착한 바이트 수. 0보다 크면 읽을 데이터가 있음 |
@@ -501,6 +563,18 @@ Port         Protocol Type              Board Name  FQBN            Core
 
 **FQBN**(Fully Qualified Board Name)은 보드 종류를 나타내는 이름이다. Uno는 `arduino:avr:uno`이다.
 
+**Servo 라이브러리 설치 (최초 1회)**
+
+8장 스케치는 서보모터 제어(Part E)를 위해 `#include <Servo.h>`를 사용한다. 컴파일 전에 라이브러리를 한 번 설치한다.
+
+```bash
+arduino-cli lib install Servo
+```
+
+```text
+Installed Servo@...
+```
+
 ## 9.3 컴파일
 
 ```bash
@@ -513,7 +587,7 @@ Sketch uses 3974 bytes (12%) of program storage space. Maximum is 32256 bytes.
 Global variables use 256 bytes (12%) of dynamic memory, leaving 1792 bytes for local variables. Maximum is 2048 bytes.
 ```
 
-Uno는 프로그램 저장 공간이 32 KB, RAM이 2 KB뿐이다. 이 스케치는 각각 12%를 사용한다.
+Uno는 프로그램 저장 공간이 32 KB, RAM이 2 KB뿐이다. 위 출력은 Part A·B만 있던 스케치 기준(각각 12%)이며, Part C~E 확장판은 Servo 라이브러리가 더해져 사용량이 조금 더 크다.
 
 ## 9.4 업로드
 
@@ -865,7 +939,59 @@ write("OFF\n")                ─── "OFF\n" ────►  digitalWrite(7,
 
 ---
 
-# 14. 실습 과제
+# 14. Part C~E — 조도센서·신호 필터링·서보모터 (개요)
+
+자세한 설명과 단계별 실습은 강의 슬라이드를 따른다. 이 장은 배선과 실행 방법만 정리한다. 8장 스케치(Part C~E 확장판)를 업로드해 두었다면 Arduino 코드는 더 고칠 필요가 없다.
+
+| 파트 | Python 프로그램 | Arduino에 보내는 명령 | 받는 메시지 |
+|---|---|---|---|
+| C. 조도센서 입력 | `light_read.py` | `STREAM ON` / `STREAM OFF` | `LIGHT <0~1023>` (0.1초마다) |
+| D. 신호 필터링 | `light_filter.py` | `STREAM ON`, `ON` / `OFF` | `LIGHT <0~1023>`, `ACK ON/OFF` |
+| E. 서보모터 제어 | `servo_control.py` | `SERVO <0~180>` | `ACK SERVO <각도>` |
+
+세 프로그램 모두 `led_blink_serial.py`의 `find_arduino_port()`(와 `send()`)를 가져다 쓰므로 **같은 폴더**에 두고 실행한다.
+
+## 14.1 조도센서 배선 (Part C·D)
+
+조도센서(CdS)와 10kΩ 저항으로 **전압 분배** 회로를 만들어 **A0**에 연결한다.
+
+```text
+Arduino 5V ──── [CdS 조도센서] ──┬── [저항 10kΩ] ──── Arduino GND
+                                 │
+                             Arduino A0
+```
+
+- 밝으면 CdS 저항이 작아져 A0 전압이 올라간다 → `analogRead(A0)` 값이 **커진다**.
+- `analogRead()`는 0~5V를 0~1023으로 바꾼다(10비트 ADC). 전압 = 값 × 5.0 / 1023.
+
+## 14.2 서보모터 배선 (Part E)
+
+| SG90 선 색 | 연결 |
+|---|---|
+| 갈색 | GND |
+| 빨강 | 5V |
+| 주황 | D9 (신호) |
+
+서보는 움직이는 순간 전류를 많이 쓴다. Arduino가 리셋되거나 서보가 떨리면 16장을 참고한다.
+
+## 14.3 실행
+
+```bash
+cd ~/Arduino
+python3 light_read.py                         # Part C: 손으로 가리거나 빛을 비추며 값 변화 관찰
+python3 light_filter.py --csv light.csv       # Part D: raw / MA / EMA 비교, 어두우면 LED ON
+python3 light_filter.py --window 10 --alpha 0.2 --dark 300 --bright 400
+python3 servo_control.py                      # Part E: 각도 직접 입력 (q: 종료)
+python3 servo_control.py --sweep --step 30    # Part E: 0도 → 180도 → 0도 왕복
+```
+
+- **Part D 히스테리시스:** EMA가 `--dark`(300)보다 작아지면 LED를 켜고, `--bright`(400)보다 커져야 끈다. 기준값이 하나뿐이면 경계 근처에서 LED가 계속 깜빡이는데, 두 기준 사이에 간격을 두어 이를 막는다.
+- `--csv`로 기록한 파일은 `time_s, raw, ma, ema, led` 열을 가진다. 그래프로 그리면 필터의 효과(잡음 감소와 지연)를 비교할 수 있다.
+- 프로그램을 끝내면 `STREAM OFF`, `OFF`(Part D), `SERVO 90`(Part E)을 보내 원래 상태로 돌려놓는다.
+
+---
+
+# 15. 실습 과제
 
 **과제 1. 응답 시간 측정**
 
@@ -899,7 +1025,7 @@ Python에서 `HELLO`를 보내 `ERR HELLO` 응답이 오는지 확인하라. 그
 
 ---
 
-# 15. 문제 해결
+# 16. 문제 해결
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
@@ -915,7 +1041,11 @@ Python에서 `HELLO`를 보내 `ERR HELLO` 응답이 오는지 확인하라. 그
 | 업로드 시 `programmer is not responding` | 포트를 다른 프로그램이 사용 중, 또는 FQBN 불일치 | Python 프로그램 종료 후 재시도. 호환 Nano는 `arduino:avr:nano:cpu=atmega328old` |
 | Docker 컨테이너 안에서 포트가 안 보임 | 장치가 컨테이너에 전달되지 않음 | `docker run --device /dev/ttyACM0 ...` |
 | 스위치를 눌러도 `BTN PRESSED`가 안 나옴 | 스위치 배선 오류, 같은 쪽 다리 2개 사용 | D6과 GND에 연결됐는지 확인. 택트 스위치는 **대각선 다리** 사용 (2.2절) |
-| 누르지 않았는데 `BTN PRESSED`/`RELEASED`가 계속 나옴 | 풀업이 없어 핀이 떠 있음(floating) | 스케치에 `INPUT_PULLUP`이 있는지 확인 후 다시 업로드 |
+| 누르지 않았는데 `BTN PRESSED`/`RELEASED`가 계속 나옴 | 10kΩ 풀업 저항 누락 또는 접촉 불량(핀이 떠 있음) | D6 열과 5V 사이 10kΩ 확인 (2.2절) |
 | 누를 때 `RELEASED`, 뗄 때 `PRESSED`가 나옴 (반대로 동작) | 풀다운 방식으로 배선됨 (스위치가 5V 쪽에 연결) | 스위치를 D6 ↔ **GND**로 다시 배선 |
 | 한 번 눌렀는데 `BTN PRESSED`가 여러 번 나옴 | 채터링 | `DEBOUNCE_MS` 값을 50 정도로 늘리기 |
-| `ModuleNotFoundError: No module named 'led_blink_serial'` | 두 `.py` 파일이 다른 폴더에 있음 | `button_led_serial.py`를 `led_blink_serial.py`와 같은 폴더에 두고, 그 폴더에서 실행 |
+| `ModuleNotFoundError: No module named 'led_blink_serial'` | 두 `.py` 파일이 다른 폴더에 있음 | `button_led_serial.py`, `light_read.py`, `light_filter.py`, `servo_control.py`를 `led_blink_serial.py`와 같은 폴더에 두고, 그 폴더에서 실행 |
+| 컴파일 시 `Servo.h: No such file or directory` | Servo 라이브러리 미설치 | `arduino-cli lib install Servo` (9.2절) |
+| `LIGHT` 값이 항상 0 또는 1023 근처 | 조도센서·10kΩ 전압 분배 배선 오류 | 5V → CdS → A0 → 10kΩ → GND 순서인지 확인 (14.1절) |
+| 밝게 하면 값이 오히려 작아짐 | CdS와 10kΩ 위치가 서로 바뀜 | 두 부품 위치를 바꾸거나, 그대로 두고 판단 기준을 반대로 사용 |
+| 서보가 떨리거나 Arduino가 리셋됨 | 서보가 순간적으로 큰 전류를 사용 | 배선 확인, USB 포트 바꾸기. 계속되면 서보 전원을 외부 5V로 분리(GND는 공통) |
