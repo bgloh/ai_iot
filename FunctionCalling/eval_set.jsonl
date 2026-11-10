@@ -1,0 +1,42 @@
+{"text": "LED 켜줘", "expect": [{"name": "set_led", "arguments": {"state": "on"}}]}
+{"text": "불 좀 켜 줄래?", "expect": [{"name": "set_led", "arguments": {"state": "on"}}]}
+{"text": "엘이디 on", "expect": [{"name": "set_led", "arguments": {"state": "on"}}]}
+{"text": "LED에 불 들어오게 해줘", "expect": [{"name": "set_led", "arguments": {"state": "on"}}]}
+{"text": "Turn on the LED", "expect": [{"name": "set_led", "arguments": {"state": "on"}}]}
+{"text": "조명 켜", "expect": [{"name": "set_led", "arguments": {"state": "on"}}]}
+{"text": "LED 꺼줘", "expect": [{"name": "set_led", "arguments": {"state": "off"}}]}
+{"text": "불 꺼", "expect": [{"name": "set_led", "arguments": {"state": "off"}}]}
+{"text": "LED 이제 그만 꺼도 돼", "expect": [{"name": "set_led", "arguments": {"state": "off"}}]}
+{"text": "엘이디 off 해줘", "expect": [{"name": "set_led", "arguments": {"state": "off"}}]}
+{"text": "Turn the LED off please", "expect": [{"name": "set_led", "arguments": {"state": "off"}}]}
+{"text": "조명 끄기", "expect": [{"name": "set_led", "arguments": {"state": "off"}}]}
+{"text": "서보를 45도로 돌려줘", "expect": [{"name": "set_servo", "arguments": {"angle": 45}}]}
+{"text": "서보모터 120도", "expect": [{"name": "set_servo", "arguments": {"angle": 120}}]}
+{"text": "모터를 0도로 보내", "expect": [{"name": "set_servo", "arguments": {"angle": 0}}]}
+{"text": "서보 180도까지 돌려", "expect": [{"name": "set_servo", "arguments": {"angle": 180}}]}
+{"text": "서보를 가운데로 돌려놔", "expect": [{"name": "set_servo", "arguments": {"angle": 90}}]}
+{"text": "Move the servo to 30 degrees", "expect": [{"name": "set_servo", "arguments": {"angle": 30}}]}
+{"text": "서보 각도 60으로 맞춰줘", "expect": [{"name": "set_servo", "arguments": {"angle": 60}}]}
+{"text": "서보 150도로 회전", "expect": [{"name": "set_servo", "arguments": {"angle": 150}}]}
+{"text": "서보모터를 10도 위치로", "expect": [{"name": "set_servo", "arguments": {"angle": 10}}]}
+{"text": "서보를 중앙 위치로 해줘", "expect": [{"name": "set_servo", "arguments": {"angle": 90}}]}
+{"text": "서보 75도", "expect": [{"name": "set_servo", "arguments": {"angle": 75}}]}
+{"text": "servo 135", "expect": [{"name": "set_servo", "arguments": {"angle": 135}}]}
+{"text": "지금 조도 값 알려줘", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "방이 얼마나 밝아?", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "조도센서 읽어봐", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "지금 어두워?", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "What is the light level now?", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "밝기 센서 값 확인해줘", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "어두우면 LED 켜줘", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "밝으면 불 꺼줘", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "주변이 어두운지 보고 어두우면 조명 켜", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "조도 확인해서 밝으면 서보를 0도로", "expect": [{"name": "read_light", "arguments": {}}]}
+{"text": "안녕", "expect": []}
+{"text": "너는 뭘 할 수 있어?", "expect": []}
+{"text": "고마워", "expect": []}
+{"text": "부저 울려줘", "expect": []}
+{"text": "오늘 날씨 어때?", "expect": []}
+{"text": "모터 속도를 올려줘", "expect": []}
+{"text": "온도 센서 값 알려줘", "expect": []}
+{"text": "1 더하기 1은?", "expect": []}
