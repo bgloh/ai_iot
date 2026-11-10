@@ -1362,7 +1362,71 @@ docker run --rm --runtime=nvidia -v $HOME/models:/models \
 
 </details>
 
-## 8.9 파인튜닝한 모델로 다시 채점
+## 8.9 Jetson에서 파인튜닝한 모델 실행 확인
+
+채점하기 전에 **서버가 켜져 있는지**, 그리고 **켜진 모델이 내가 학습한 파일인지** 먼저 확인한다. 서버가 꺼진 채로 `fc_eval.py`를 실행하면 모든 요청이 실패한다. 그런데도 "함수를 부르면 안 되는" 8문제는 정답으로 처리되어 `정확도 8/42 = 19.0%` 같은 엉뚱한 숫자가 나온다.
+
+아래는 FunctionGemma 기준이다. Qwen3 0.6B는 `ft-functiongemma` 대신 `ft-qwen3-0.6b`, 파일 이름은 `qwen3-0.6b-arduino-Q8_0.gguf`로 바꿔 읽는다.
+
+**1) 파인튜닝한 모델로 서버 켜기**
+
+🟦 **Jetson 터미널 1**
+
+```bash
+cd ~/fc_lab
+./start_server.sh ft-functiongemma
+```
+
+`ft-...`를 주면 `start_server.sh`가 Hugging Face에서 모델을 내려받는 `-hf` 대신 **내 파일을 읽는 `-m /models/functiongemma-arduino-Q8_0.gguf`** 로 서버를 켠다. Jetson의 `~/models` 폴더가 컨테이너 안에서는 `/models`로 연결되어 있다 (3.2절의 `-v` 옵션).
+
+✅ 확인: `offloaded 19/19 layers to GPU`, `준비 완료 → http://localhost:8080`
+
+❌ `준비 완료`가 안 나오고 `서버가 시작 중에 종료되었습니다`가 나오면, 함께 출력된 로그를 읽고 12.4절을 본다.
+
+**2) 켜진 모델이 내 파일인지 확인**
+
+🟩 **Jetson 터미널 2**
+
+```bash
+curl -s localhost:8080/health
+curl -s localhost:8080/v1/models | python3 -m json.tool | grep '"id"'
+```
+
+✅ 확인:
+
+- 첫 줄이 `{"status":"ok"}` 이면 서버가 요청을 받을 준비가 된 것이다.
+- `"id"` 에 **`functiongemma-arduino-Q8_0.gguf`** 가 들어 있으면 파인튜닝한 모델이다. `unsloth/functiongemma-270m-it` 나 `Qwen/Qwen3-...` 가 보이면 원본 모델이 켜져 있는 것이므로 1)을 다시 한다.
+
+**3) 명령 몇 개로 바로 시험해 보기**
+
+Arduino 없이 가짜 장치로 세 문장만 넣어 본다.
+
+```bash
+python3 fc_c_arduino_agent.py --fake
+```
+
+```text
+명령 > 서보를 45도로 돌려줘
+명령 > 지금 어두워? 어두우면 LED 켜줘
+명령 > 부저 울려줘
+명령 > q
+```
+
+✅ 확인:
+
+| 명령 | 기대하는 도구 호출 |
+|---|---|
+| 서보를 45도로 돌려줘 | `[도구] set_servo({"angle": 45})` |
+| 지금 어두워? 어두우면 LED 켜줘 | `[도구] read_light({})` 가 **먼저** 나옴 |
+| 부저 울려줘 | `[도구]` 줄 없이 답변만 나옴 |
+
+6.6절의 원본 FunctionGemma가 180도로 돌리거나 `set_led({})`로 실패하던 것과 비교해 본다.
+
+❌ `요청 실패: ... Max retries exceeded` 가 나오면 서버가 꺼져 있다. 1)로 돌아간다.
+
+## 8.10 파인튜닝한 모델로 다시 채점
+
+8.9절의 확인을 통과한 뒤 채점한다. 한 문제에 0.2~0.8초씩 걸려야 정상이다. 모든 문제가 `0.0s`이고 `no_call`이면 서버가 꺼져 있는 것이다 (8.9절 2단계).
 
 ```bash
 # 🟦 터미널 1                          # 🟩 터미널 2
@@ -1404,9 +1468,9 @@ docker run --rm --runtime=nvidia -v $HOME/models:/models \
 
 > 42문제에서 1문제 차이는 약 2.4%다. 2.4%와 4.8%는 **1문제 차이**이므로 "더 정확하다"고 단정하기보다 "비슷한 수준"으로 보는 것이 맞다. 문제 수가 많을수록 비교가 믿을 만해진다 (과제 6).
 >
-> **학습할 때마다 결과가 조금씩 다르다.** 같은 노트북으로 FunctionGemma를 한 번 더 학습했더니 Jetson에서 42/42 = **100%** 가 나왔다 (위 표는 첫 번째 학습 결과). GPU 연산 순서 등에 따라 1문제 정도는 달라질 수 있으므로, 자기 결과가 97~100% 사이면 정상이다.
+> **학습할 때마다 결과가 조금씩 다르다.** 같은 노트북으로 FunctionGemma를 다시 학습했더니 Jetson에서 한 번은 42/42 = **100%**, 또 한 번은 40/42 = **95.2%** 가 나왔다 (위 표는 첫 번째 학습 결과). 95.2%일 때는 "LED에 불 들어오게 해줘"에 LED를 끄고(`wrong_args`), 없는 기능인 "모터 속도를 올려줘"에 서보를 90도로 돌렸다(`unwanted_call`). GPU 연산 순서 등에 따라 1~2문제 정도는 달라질 수 있으므로, 자기 결과가 95~100% 사이면 정상이다.
 
-## 8.10 파인튜닝한 모델로 Arduino 제어
+## 8.11 파인튜닝한 모델로 Arduino 제어
 
 6.5절과 같은 6개 명령을 두 파인튜닝 모델로 각각 입력한다.
 
@@ -1580,7 +1644,7 @@ sudo shutdown -h now
 
 **과제 8. 답변 문장 고치기 (파인튜닝)**
 
-8.10절의 FunctionGemma (FT)는 함수 호출은 맞지만 "서보를 움직이고 LED를 켰습니다"처럼 답변이 틀린다. `make_train_data.py`를 고쳐 ① 답변 문장을 도구 결과(`reply`, `value`)에 맞게 만들고 ② `{"error": ...}` 결과를 받았을 때 사용자에게 알리는 예문을 추가한 뒤, 다시 학습해 6개 명령으로 확인하라.
+8.11절의 FunctionGemma (FT)는 함수 호출은 맞지만 "서보를 움직이고 LED를 켰습니다"처럼 답변이 틀린다. `make_train_data.py`를 고쳐 ① 답변 문장을 도구 결과(`reply`, `value`)에 맞게 만들고 ② `{"error": ...}` 결과를 받았을 때 사용자에게 알리는 예문을 추가한 뒤, 다시 학습해 6개 명령으로 확인하라.
 
 **과제 9. 범위 밖 요청 가르치기 (파인튜닝)**
 
@@ -1641,6 +1705,9 @@ Qwen3 계열은 파인튜닝 후에도 "200도"를 몰래 20도로 바꿨다. `m
 | Colab 연결이 끊김 | 무료 GPU 사용 시간 제한 | 다시 연결 → 파일 업로드 → 처음부터. 시간이 부족하면 FunctionGemma만 학습 |
 | Jetson 정확도가 Colab보다 많이 낮음 | 학습 때와 다른 시스템 프롬프트·함수 설명 사용 | `fc_c_arduino_agent.py`의 `SYSTEM_PROMPT`, `TOOLS`를 학습할 때와 같게 유지 |
 | 파인튜닝한 Qwen3 답변에 `<think>` 가 섞임 | `--reasoning-budget 0` 없이 실행 | `./start_server.sh ft-qwen3-0.6b`로 켜기 |
+| `fc_eval.py` 결과가 모두 `0.0s`·`no_call`, `요청 실패: ... Max retries exceeded` | 서버가 꺼진 채로 채점함 (정확도 19.0%로 나옴) | `./start_server.sh ft-...` 후 `준비 완료` 확인, 8.9절 2단계 |
+| `/v1/models`의 `id`에 `-arduino-Q8_0.gguf`가 없음 | 원본 모델이 켜져 있음 | `./start_server.sh ft-functiongemma` (또는 `ft-qwen3-0.6b`)로 다시 켜기 |
+| `./start_server.sh ft-...` 후 `서버가 시작 중에 종료되었습니다` + `failed to load model`, `invalid magic` | GGUF 파일이 깨짐 (복사·다운로드가 중간에 끊김) | `ls -lh ~/models/*.gguf`로 크기(279M, 610M) 확인 → 다시 복사, 또는 8.8절의 Jetson 변환 |
 
 ---
 
