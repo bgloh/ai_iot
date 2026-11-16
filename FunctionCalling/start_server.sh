@@ -57,5 +57,7 @@ for i in $(seq 1 120); do
   printf "."
 done
 echo
-echo "6분 안에 준비되지 않았습니다. 'docker logs fc_llm'으로 확인하세요."
+echo "6분 안에 준비되지 않았습니다. 첫 실행이면 컨테이너(fc_llm)가 아직 모델을 받고 있을 수 있습니다."
+echo "  진행 확인: docker logs -f fc_llm   (Ctrl+C로 보기만 멈춤)"
+echo "  다운로드가 끝난 뒤 같은 명령을 다시 실행하세요."
 exit 1
