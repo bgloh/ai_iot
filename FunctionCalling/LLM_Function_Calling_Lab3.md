@@ -169,7 +169,7 @@ LLM은 우리가 만든 Python 함수 코드를 볼 수 없다. 그래서 **이�
 | `properties` | 인자 목록과 각 인자의 타입·범위 | `angle`: 0~180 정수 |
 | `required` | 반드시 넣어야 하는 인자 | `angle` |
 
-## 1.4 모델마다 "주문서 양식"이 다르다
+## 1.4 모델마다 함수 호출 "형식(Format)"이 다르다
 
 LLM은 결국 글자만 출력한다. 모델이 실제로 출력하는 글자는 다음과 같이 다르다.
 
@@ -178,7 +178,7 @@ LLM은 결국 글자만 출력한다. 모델이 실제로 출력하는 글자는
 | Qwen3 (0.6B, 1.7B 같음) | `<tool_call>{"name": "set_led", "arguments": {"state": "on"}}</tool_call>` |
 | FunctionGemma | `<start_function_call>call:set_led{state:<escape>on<escape>}<end_function_call>` |
 
-LLM 서버(llama-server)는 이 글자를 읽어 `tool_calls`라는 정리된 JSON으로 바꿔 준다. 그런데 이번에 쓰는 버전은 **Qwen3 양식만 바꿔 주고, FunctionGemma 양식은 그대로 넘긴다.** 그래서 우리 Python 코드(`fc_b_tools_api.py`)가 FunctionGemma의 글자를 직접 읽도록 만들어 두었다 (5.4절).
+LLM 서버(llama-server)는 이 글자를 읽어 `tool_calls`라는 정리된 JSON으로 바꿔 준다. 그런데 이번에 쓰는 버전은 **Qwen3 형식만 바꿔 주고, FunctionGemma 형식은 그대로 넘긴다.** 그래서 우리 Python 코드(`fc_b_tools_api.py`)가 FunctionGemma의 글자를 직접 읽도록 만들어 두었다 (5.4절).
 
 ## 1.5 AI를 믿지 말 것 — 안전 장치
 
@@ -251,9 +251,9 @@ ls
 ✅ 확인:
 
 ```text
-Finetune_Colab.ipynb          fc_a_prompt_json.py  fc_c_arduino_agent.py  make_train_data.py
-LLM_Function_Calling_Lab3.md  fc_b_tools_api.py    fc_eval.py             start_server.sh
-eval_set.jsonl
+Finetune_Colab.ipynb          eval_set.jsonl       fc_c_arduino_agent.py  make_train_data.py  start_server.sh
+LLM_Function_Calling_Lab3.md  fc_a_prompt_json.py  fc_eval.py             q10.txt
+check_arduino.py              fc_b_tools_api.py    ko_score.py            q_multi.txt
 ```
 
 각 파일의 역할:
@@ -264,9 +264,12 @@ eval_set.jsonl
 | `fc_a_prompt_json.py` | Part A | 프롬프트만으로 도구 사용 흉내 내기 (Jetson 온도·메모리 읽기) |
 | `fc_b_tools_api.py` | Part B | 표준 tools API + 에이전트 루프 |
 | `fc_c_arduino_agent.py` | Part C | 말로 Arduino 제어하기 |
-| `fc_eval.py`, `eval_set.jsonl` | Part D | 정확도 채점 프로그램과 채점 문제 42개 |
+| `check_arduino.py` | Part C | Arduino 연결·스케치 확인 |
+| `fc_eval.py`, `eval_set.jsonl` | Part D | 정확도 채점 프로그램과 채점 문제(현재 42개) |
+| `ko_score.py` | Part D | Part D 결과를 한국어/영어 문항으로 나눠 채점 |
 | `make_train_data.py` | Part E | 파인튜닝용 학습 데이터 만들기 |
 | `Finetune_Colab.ipynb` | Part E | Colab에서 실행할 파인튜닝 노트북 (Jetson에서는 쓰지 않음) |
+| `q10.txt`, `q_multi.txt` | 과제 1·2 | 과제 1·2 질문 파일 |
 
 > `.py` 파일들은 서로를 불러 쓰므로(`import`) **반드시 같은 폴더**에 있어야 하고, **그 폴더 안에서** 실행해야 한다. 앞으로 Jetson 명령은 모두 `~/fc_lab` 폴더에서 실행한다고 가정한다. 새 터미널을 열면 먼저 `cd ~/fc_lab` 을 입력한다.
 
@@ -390,7 +393,7 @@ docker run -d --name fc_llm \
 | `-v A:B` | Jetson 폴더 A를 컨테이너 안 폴더 B로 연결한다. 내려받은 모델이 Jetson에 남아서, 다음에는 다시 받지 않는다 (이 이미지는 모델을 `/data/models/huggingface`에 저장한다) |
 | `-hf 저장소:파일` | Hugging Face에서 모델을 내려받아 실행 (`-m 파일경로`는 내 파일을 실행) |
 | `--reasoning-budget 0` | Qwen3의 "생각하기" 단계를 끈다. 켜 두면 답하기 전에 긴 생각 글을 먼저 만들어 느려진다 |
-| `--jinja` | 모델별 대화 양식(채팅 템플릿)을 사용한다 → 함수 호출 기능에 필요 |
+| `--jinja` | 모델별 대화 형식(채팅 템플릿)을 사용한다 → 함수 호출 기능에 필요 |
 | `-c 4096` | 한 번에 기억하는 대화 길이를 4096토큰으로 제한 (메모리 절약) |
 | `-ngl 99` | 모델의 모든 층을 GPU에 올린다 |
 | `--port 8080` | 8080번 포트로 요청을 받는다 |
@@ -497,6 +500,8 @@ SYSTEM_PROMPT = """너는 Jetson Orin Nano 보드의 도우미다.
 
 **② 질문 하나를 처리하는 순서**
 
+(핵심만 남긴 요약본이다. 실제 파일에는 이름 검사와 예외 처리가 더 있다.)
+
 ```python
 first = chat(args.url, messages)          # (1) AI에게 질문 → 1차 출력
 request = parse_tool_request(first)       # (2) 출력에서 {"tool": ...} 부분을 찾는다
@@ -588,7 +593,7 @@ python3 fc_a_prompt_json.py
 
 ## 5.1 목표
 
-Part A에서는 규칙을 글로 적었다. Part B에서는 함수 설명서(JSON Schema, 1.3절)를 **`tools`라는 정해진 칸**에 넣어 보낸다. 서버가 모델에 맞는 양식으로 프롬프트를 만들고, AI의 출력을 `tool_calls`로 정리해 준다 (3.4절에서 본 것).
+Part A에서는 규칙을 글로 적었다. Part B에서는 함수 설명서(JSON Schema, 1.3절)를 **`tools`라는 정해진 칸**에 넣어 보낸다. 서버가 모델에 맞는 형식으로 프롬프트를 만들고, AI의 출력을 `tool_calls`로 정리해 준다 (3.4절에서 본 것).
 
 ## 5.2 코드 이해하기 — 에이전트 루프
 
@@ -788,6 +793,8 @@ arduino-cli upload -p /dev/ttyACM0 --fqbn arduino:avr:uno led_serial
 
 함수 3개의 실제 동작이다. **AI가 준 값을 그대로 믿지 않고 한 번 더 검사**하는 부분(★)에 주목한다.
 
+(핵심만 남긴 요약본이다. 실제 파일에는 이름 검사와 예외 처리가 더 있다.)
+
 ```python
 def make_functions(dev):            # dev = Arduino(진짜) 또는 FakeArduino(가짜)
 
@@ -955,6 +962,8 @@ LED 켜줘
 (이후 3개 명령도 set_servo(180) 또는 인자 없는 set_led({})로 실패)
 ```
 
+(`sear`는 모델이 `servo`를 잘못 쓴 실제 출력이다.)
+
 ## 6.6 결과 정리
 
 자기 실험 결과를 아래 표에 기록한다 (O: 맞음, X: 틀림, △: 동작했지만 문제 있음). 괄호 안은 이 문서를 만들 때의 실측 결과다.
@@ -973,10 +982,12 @@ LED 켜줘
 
 - **"어두우면 LED 켜줘"**: 두 Qwen3 모델은 먼저 조도를 읽고(약 500 = 밝음), **LED를 켜지 않기로** 판단했다. 결과를 보고 다음 행동을 정하는 에이전트 루프가 동작한 것이다. 조도센서를 손으로 가리고 다시 해 보라.
 - **"서보 200도로"**: 두 Qwen3 모델 모두 사용자에게 알리지 않고 **몰래 20도로 바꿔** 실행했다. Python의 범위 검사(0~180)는 AI가 이미 값을 바꿔 버리면 동작할 기회가 없다. 위험한 실수다.
+
+  이 실수는 위 표처럼 실제로 일어났다. temperature 0이므로 같은 모델에 같은 명령을 주면 매번 같은 결과가 나온다. 원인은 두 가지로 추정한다. ① 도구 설명(`set_servo`의 `"maximum": 180`)과 시스템 프롬프트(`서보모터 1개(0~180도)`)에 범위가 적혀 있어, 모델이 규칙을 지키려고 요청 값을 범위 안의 그럴듯한 값으로 고친다(200 → 20). ② 파인튜닝 예문(`make_train_data.py`의 `random_angle()`)도 0~180만 만들므로 범위 밖 값을 그대로 넘기는 법을 배우지 못한다(과제 9). 핵심은 숫자 20이 아니라 **범위 밖 요청을 사용자에게 알리지 않고 다른 값으로 바꿔 실행하는 행동**이다.
 - **"부저 울려줘"**: 부저는 없는데 LED를 켜거나(1.7B), 아무것도 하지 않고 "꺼졌습니다"라고 **거짓으로 답했다**(0.6B). 앞 대화(LED 켜기·끄기)에 끌려간 것이다.
 - **모델이 작을수록 빠르지만** 실수가 늘어난다. FunctionGemma는 가장 빠르지만 거의 다 틀렸다.
 
-몇 개 명령으로는 공정하게 비교하기 어려우니, 다음 장에서 42개 문제로 **숫자로** 비교한다.
+몇 개 명령으로는 공정하게 비교하기 어려우니, 다음 장에서 평가 문항 세트로 **숫자로** 비교한다.
 
 ---
 
@@ -1176,16 +1187,19 @@ dir fc_lab
 2. **파일 → 노트북 업로드 → 찾아보기** → `다운로드\fc_lab\Finetune_Colab.ipynb` 선택
 3. 메뉴 **런타임 → 런타임 유형 변경** → 하드웨어 가속기 **T4 GPU** → **저장**
 4. 화면 왼쪽의 **폴더 아이콘(📁)** 을 눌러 파일 패널을 연다.
-5. PC의 `다운로드\fc_lab` 폴더에서 아래 **4개 파일**을 파일 패널로 끌어다 놓는다.
+5. PC의 `다운로드\fc_lab` 폴더에서 아래 **5개 파일**을 파일 패널로 끌어다 놓는다.
 
 ```text
+fc_a_prompt_json.py
 fc_b_tools_api.py
 fc_c_arduino_agent.py
 make_train_data.py
 eval_set.jsonl
 ```
 
-✅ 확인: 파일 패널에 4개 파일이 보인다. ("런타임이 재활용되면 파일이 삭제됩니다"라는 안내는 정상이다.)
+> `fc_c_arduino_agent.py`가 `fc_b_tools_api.py`를, 그것이 다시 `fc_a_prompt_json.py`를 불러 쓰므로(`import`) 5개가 모두 있어야 한다.
+
+✅ 확인: 파일 패널에 5개 파일이 보인다. ("런타임이 재활용되면 파일이 삭제됩니다"라는 안내는 정상이다.)
 
 > Colab 무료 GPU는 오래 쓰지 않거나 사용 시간이 길어지면 연결이 끊긴다. 끊기면 파일을 다시 올리고 처음 셀부터 다시 실행한다.
 
@@ -1197,7 +1211,7 @@ eval_set.jsonl
 
 | 셀 | 하는 일 | 걸리는 시간 | ✅ 확인 (FunctionGemma) |
 |---|---|---|---|
-| ① 첫 번째 | 라이브러리 설치, 파일 목록 출력 | 1~2분 | 마지막에 업로드한 4개 파일 이름이 보인다 |
+| ① 첫 번째 | 라이브러리 설치, 파일 목록 출력 | 1~2분 | 마지막에 업로드한 5개 파일 이름이 보인다 |
 | ① 두 번째 | 모델 불러오기 | 1분 | `functiongemma \| Tesla T4 \| bf16: False`, `파라미터 268M` |
 | ② | 학습 데이터 1,500개 생성 | 수 초 | `train.jsonl: 1500개 (... 평가 문장과 겹쳐 제외 19개)` |
 | ③ | **학습 전** 채점 (42문제) | 1~2분 | `정확도 32/42 = 76.2%` 근처 |
@@ -1265,7 +1279,7 @@ X LED에 불 들어오게 해줘 | 정답 [{'name': 'set_led', 'arguments': {'st
 
 > **loss** 는 "정답과 얼마나 다르게 예측했는가"를 나타내는 값이다. 작을수록 정답에 가깝다. 예문이 단순한 규칙으로 만들어져서 금방 0 가까이 떨어진다.
 >
-> ③의 학습 전 정확도가 Jetson(7장)과 조금 다른 것은, Colab은 원본 모델을 쓰고 Jetson은 8비트로 줄인(Q8_0) 모델을 쓰기 때문이다.
+> ③의 학습 전 정확도가 Jetson(7장)과 조금 다른 것은, Colab은 원본 모델을 쓰고 Jetson은 8비트로 줄인(Q8_0) 모델을 쓰기 때문이다. 또한 Colab 노트북의 채점 코드는 같은 인자를 두 번 쓴 출력을 마지막 값으로 읽고, Jetson의 `fc_b_tools_api.py`는 오답(INVALID)으로 처리한다. 이 차이도 일부 영향을 준다.
 
 ## 8.7 학습 코드 이해하기 (읽기만 해도 된다)
 
@@ -1284,7 +1298,7 @@ def encode(messages):
     return p + t, [-100] * len(p) + t                      # -100 = "이 부분은 채점하지 마라"
 ```
 
-정답 부분은 각 모델의 함수 호출 양식 그대로다 (1.4절).
+정답 부분은 각 모델의 함수 호출 형식 그대로다 (1.4절).
 
 ```text
 FunctionGemma: <start_function_call>call:set_led{state:<escape>off<escape>}<end_function_call><start_function_response>
@@ -1307,9 +1321,9 @@ else:                                  # Qwen3 0.6B: LoRA — 각 층에 작은 
 ```
 
 - FunctionGemma는 단어 26만 개의 사전이 전체 크기의 절반이 넘는다. 사전은 그대로 두고 나머지만 학습하면 메모리가 줄고, 적은 데이터로 학습할 때 생기는 부작용(과적합)도 줄어든다.
-- LoRA는 큰 행렬 W를 직접 바꾸는 대신, 작은 행렬 두 개(A, B)를 학습해 W + B·A 로 쓴다. 학습이 끝나면 ⑤ 셀의 `merge_and_unload()` 가 B·A를 W에 더해 **보통 모델로 합친다.** 그래서 Jetson에서는 일반 모델과 똑같이 쓴다.
+- LoRA는 큰 행렬 W를 직접 바꾸는 대신, 작은 행렬 두 개(A, B)를 학습해 W + (α/r)·B·A 로 쓴다 (r = 16, α = lora_alpha = 32 → 배율 α/r = 2). 학습이 끝나면 ⑤ 셀의 `merge_and_unload()` 가 (α/r)·B·A를 W에 더해 **보통 모델로 합친다.** 그래서 Jetson에서는 일반 모델과 똑같이 쓴다.
 
-**③ 학습 설정** (④ 셀): 전체 데이터를 2번 반복(`EPOCHS = 2`), 한 번에 2개씩 보고 8번 모아서 한 번 수정(`BATCH = 2`, `ACCUM = 8`), 학습률은 FunctionGemma `5e-5`, Qwen3 LoRA `2e-4` (LoRA는 학습하는 양이 적어서 보통 학습률을 더 크게 쓴다).
+**③ 학습 설정** (④ 셀): 전체 데이터를 2번 반복(`EPOCHS = 2`), 한 번에 2개씩 보고 8번 모아서 한 번 수정(`BATCH = 2`, `ACCUM = 8`), 학습률은 FunctionGemma `5e-5`, Qwen3 LoRA `2e-4` (LoRA는 학습하는 양이 적어서 보통 학습률을 더 크게 쓴다). (에폭마다 남는 미니배치 6개 때문에 실제 수정 횟수는 186회로, 표시값 187과 1회 차이 난다.)
 
 ## 8.8 Jetson으로 파일 복사
 
