@@ -73,7 +73,7 @@ def led_text(on):
         return random.choice(EN_ON if on else EN_OFF).format(x=random.choice(EN_LED))
     word = random.choice(LED_WORDS)
     verb = random.choice(ON_VERBS if on else OFF_VERBS)
-    obj = "을" if word in ("조명", "전등", "LED 조명", "불") else "를"  # 받침 있으면 '을'
+    obj = "을" if word in ("조명", "전등", "LED 조명", "불", "LED 불") else "를"  # 받침 있으면 '을'
     middle = random.choice([" ", " ", f"{obj} ", " 좀 "])
     return f"{word}{middle}{verb}"
 
